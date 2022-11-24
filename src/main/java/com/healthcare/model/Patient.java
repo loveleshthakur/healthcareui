@@ -15,7 +15,7 @@ public class Patient {
     private int patientId;
     
 	private String name;
-    private Date dob ;
+    private String dob ;
    
     
   
@@ -43,11 +43,11 @@ public class Patient {
 		this.name = name;
 	}
 
-	public Date getDob() {
+	public String getDob() {
 		return dob;
 	}
 
-	public void setDob(Date dob) {
+	public void setDob(String dob) {
 		this.dob = dob;
 	}
 

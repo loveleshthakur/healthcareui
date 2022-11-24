@@ -3,15 +3,18 @@ package com.healthcare;
 import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
 import java.io.IOException;
-import java.text.SimpleDateFormat;
+import java.net.http.HttpResponse;
 import java.util.List;
-import java.util.Set;
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.swt.widgets.Tree;
@@ -19,11 +22,10 @@ import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.swt.widgets.TreeItem;
 
 import com.healthcare.httpclient.ApiHttpClient;
+import com.healthcare.httpclient.ResponseMessageBox;
 import com.healthcare.model.Address;
 import com.healthcare.model.Patient;
-import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.Menu;
-import org.eclipse.swt.widgets.MenuItem;
+import com.healthcare.model.Phone;
 public class HealthcareApp {
 
 	
@@ -52,7 +54,7 @@ public class HealthcareApp {
 		Text searchByNameText = new Text(shell, SWT.BORDER);
 		GridData gridData = new GridData();
 		gridData.horizontalAlignment = GridData.FILL;
-		gridData.horizontalSpan = 2;
+		gridData.horizontalSpan = 1;
 		searchByNameText.setLayoutData(gridData);
 		
 		Button searchByNameButton = new Button (shell, SWT.PUSH);
@@ -62,7 +64,8 @@ public class HealthcareApp {
 		searchByNameButton.setLayoutData(gridDataButton);
 		searchByNameButton.setText ("Search Patient By Name");
 		
-		new Label(shell, SWT.NONE);
+		
+		
 		searchByNameButton.addSelectionListener(widgetSelectedAdapter(e -> {
 			try {
 				getPatientsList(searchByNameText.getText());
@@ -74,9 +77,27 @@ public class HealthcareApp {
 		}));
 		
 		
+		
+		Button searchByGovtIdButton = new Button (shell, SWT.PUSH);
+		GridData gridDataButtonByGovtIdButton = new GridData();
+		gridDataButtonByGovtIdButton.horizontalAlignment = GridData.END;
+		gridDataButtonByGovtIdButton.horizontalSpan = 1;
+		searchByGovtIdButton.setText ("Search Patient By Govt Id");
+		
+		searchByGovtIdButton.addSelectionListener(widgetSelectedAdapter(e -> {
+			try {
+				getPatientByGovtId(searchByNameText.getText());
+			} catch (IOException e1) {
+				e1.printStackTrace();
+			} catch (InterruptedException e1) {
+				e1.printStackTrace();
+			}
+		}));
+		
+		
 		GridData gridDataForTree = new GridData();
 		gridDataForTree.horizontalAlignment = GridData.FILL;
-		gridDataForTree.horizontalSpan = 1;
+		gridDataForTree.horizontalSpan = 2;
 
 		tree = new Tree(shell, SWT.V_SCROLL|SWT.H_SCROLL | SWT.FULL_SELECTION);
 		tree.setHeaderVisible(true);
@@ -135,6 +156,25 @@ public class HealthcareApp {
 		
 		getPatientsList("");
 		
+		Menu menu = new Menu (shell, SWT.POP_UP);
+		tree.setMenu (menu);
+
+		MenuItem view = new MenuItem (menu, SWT.PUSH);
+		view.setText ("View");
+		view.addListener (SWT.Selection, event -> {
+			viewActionListener();
+		});
+		//On click on patient record View Update and Delete should get enabled for Selected Patient
+		tree.addSelectionListener(new SelectionAdapter() {
+			public void widgetSelected(SelectionEvent event) {
+				TreeItem[] selected = tree.getSelection();
+				if (selected.length > 0) {
+					patientId = selected[0].getText(0);
+					patientSelected = true;
+					changeButtonsStatus(patientSelected);
+				}
+			}
+		});
 		
 		GridData gridDataForButtons = new GridData();
 		gridDataForTree.horizontalAlignment = GridData.FILL;
@@ -142,9 +182,11 @@ public class HealthcareApp {
 		
 		Button createPatient = new Button (shell, SWT.PUSH);
 		createPatient.setText ("Create Patient");
-		createPatient.setLayoutData(gridDataForButtons);
+		//createPatient.setLayoutData(gridDataForButtons);
 		createPatient.addSelectionListener(widgetSelectedAdapter(e -> {
 			//Create new patient
+			System.out.println("Create Patient method");
+			new UpdatePatientDetails(display, false, false);
 		}));
 		
 		viewPatient = new Button (shell, SWT.PUSH);
@@ -152,7 +194,7 @@ public class HealthcareApp {
 		viewPatient.setEnabled(patientSelected);
 		//viewPatient.setLayoutData(gridDataForButtons);
 		viewPatient.addSelectionListener(widgetSelectedAdapter(e -> {
-			//viewActionListener();
+			viewActionListener();
 		}));
 		
 		updatePatient = new Button (shell, SWT.PUSH);
@@ -160,7 +202,7 @@ public class HealthcareApp {
 		updatePatient.setEnabled(patientSelected);
 		//updatePatient.setLayoutData(gridDataForButtons);
 		updatePatient.addSelectionListener(widgetSelectedAdapter(e -> {
-			//updateActionListener();
+			updateActionListener();
 		}));
 		
 		
@@ -169,7 +211,7 @@ public class HealthcareApp {
 		deletePatient.setEnabled(patientSelected);
 		//deletePatient.setLayoutData(gridDataForButtons);
 		deletePatient.addSelectionListener(widgetSelectedAdapter(e -> {
-			//deleteActionListener();
+			deleteActionListener();
 		}));
 		
 		
@@ -182,6 +224,67 @@ public class HealthcareApp {
 		}
 		display.dispose();
 		
+	}
+
+	static void getPatientByGovtId(String govtId) throws IOException, InterruptedException {
+
+		List<Patient> patientsList = null;
+		if(govtId != "" && !govtId.isEmpty() && !govtId.equals("")) {
+			patientsList = ApiHttpClient.fetchByGovtId(govtId);
+			System.out.println(">>>>>>>>>>getPatientByGovtId "+govtId+" >>>>>>>>> "+patientsList);
+		}
+		tree.removeAll();
+		tree.update();
+		if (patientsList!=null)
+		for (int i=0; i<patientsList.size(); i++) {
+			Patient patientListItem = patientsList.get(i);
+
+			System.out.println(" patientListItem " +patientListItem);
+			TreeItem item = new TreeItem(tree, SWT.NONE);
+
+			item.setText (0, String.valueOf(patientListItem.getPatientId()));
+			item.setText (1, patientListItem.getName());
+			if (patientListItem.getDob()!=null) {
+			 item.setText (2,  patientListItem.getDob());
+			}
+			
+				
+			
+			patientListItem.getPhone().stream().forEach(ph-> System.out.println(ph.getPhoenumber()));
+			List<Phone> phonNumbers = patientListItem.getPhone();
+			for ( Phone ph :phonNumbers )
+			{
+				item.setText (3,  String.valueOf( ph.getPhoenumber()));
+			}
+			
+			List<Address> addressList = patientListItem.getAddresses();
+			if (addressList.size()>0) {
+			Address address1 = addressList.get(0);
+			 item.setText (4, address1.getStreet()); 
+			 item.setText (5, address1.getCity()); 
+			 item.setText (6, address1.getState());
+			 item.setText (7, address1.getPin().toString());
+			}
+			  
+			for (int j=1; j<addressList.size(); j++) {
+				Address address = addressList.get(j);
+				
+				  TreeItem subItem = new TreeItem(item, SWT.NONE);
+				 
+				 
+				  
+				  subItem.setText (4, address.getStreet()); 
+				  subItem.setText (5, address.getCity()); 
+				  subItem.setText (6, address.getState());
+				  subItem.setText (7, address.getPin().toString());
+				 
+			}
+			if (patientListItem.getGovtIds().size()>0) {
+			item.setText(8, patientListItem.getGovtIds().get(0).getIdentityType());
+			item.setText(9, patientListItem.getGovtIds().get(0).getIdentityNo());
+			}
+		}
+	
 	}
 
 	/**
@@ -209,17 +312,28 @@ public class HealthcareApp {
 			TreeItem item = new TreeItem(tree, SWT.NONE);
 
 			item.setText (0, String.valueOf(patientListItem.getPatientId()));
-			item.setText (1, patientListItem.getName());
-			 SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
-			 format.format(patientListItem.getDob());
-			 item.setText (2,  format.format(patientListItem.getDob()));
+			item.setText (1,  patientListItem.getName()== null ? "" : patientListItem.getName()  );
+			if (patientListItem.getDob()!=null) {
+			 item.setText (2,  patientListItem.getDob());
+			}
+			
+				
+			
 			patientListItem.getPhone().stream().forEach(ph-> System.out.println(ph.getPhoenumber()));
+			List<Phone> phonNumbers = patientListItem.getPhone();
+			for ( Phone ph :phonNumbers )
+			{
+				item.setText (3,  String.valueOf( ph.getPhoenumber()));
+			}
+			
 			List<Address> addressList = patientListItem.getAddresses();
+			if (addressList.size()>0) {
 			Address address1 = addressList.get(0);
 			 item.setText (4, address1.getStreet()); 
 			 item.setText (5, address1.getCity()); 
 			 item.setText (6, address1.getState());
 			 item.setText (7, address1.getPin().toString());
+			}
 			  
 			for (int j=1; j<addressList.size(); j++) {
 				Address address = addressList.get(j);
@@ -234,10 +348,17 @@ public class HealthcareApp {
 				  subItem.setText (7, address.getPin().toString());
 				 
 			}
-			
+			if (patientListItem.getGovtIds().size()>0) {
 			item.setText(8, patientListItem.getGovtIds().get(0).getIdentityType());
 			item.setText(9, patientListItem.getGovtIds().get(0).getIdentityNo());
+			}
 		}
+	}
+	
+	static void changeButtonsStatus(boolean patientSelected) {
+		viewPatient.setEnabled(patientSelected);
+		updatePatient.setEnabled(patientSelected);
+		deletePatient.setEnabled(patientSelected);
 	}
 
 	/**
@@ -247,6 +368,71 @@ public class HealthcareApp {
 		
 
 	}
+	
+	static void viewActionListener() {
+
+		if(patientId == "" || patientId == null) {
+			ResponseMessageBox responseBox = new ResponseMessageBox(shell);
+			responseBox.waringResponse("Please select patient record");
+			return;
+		}
+		
+		UpdatePatientDetails patientModify = new UpdatePatientDetails(display, true, false);
+		try {
+			patientModify.getPatient(patientId);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		} catch (InterruptedException e1) {
+			e1.printStackTrace();
+		} 
+	}
+	
+	static void updateActionListener() {
+
+		if(patientId == "" || patientId == null) {
+			ResponseMessageBox responseBox = new ResponseMessageBox(shell);
+			responseBox.waringResponse("Please select patient record");
+			return;
+		}
+		
+		UpdatePatientDetails patientModify = new UpdatePatientDetails(display, false, true);
+		try {
+			patientModify.getPatient(patientId);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		} catch (InterruptedException e1) {
+			e1.printStackTrace();
+		} 
+	}
+	
+	static void deleteActionListener() {
+		try {
+
+			if(patientId == "" || patientId == null) {
+				ResponseMessageBox responseBox = new ResponseMessageBox(shell);
+				responseBox.waringResponse("Please select patient record");
+				return;
+			}
+			
+			HttpResponse<String> response =  ApiHttpClient.deletePatient(patientId);
+
+			ResponseMessageBox responseBox = new ResponseMessageBox(shell);
+			if(response.statusCode() == 200) {
+				responseBox.successResponse("Patient details removed successfully");
+				getPatientsList("");
+				patientSelected = false;
+				patientId = null;
+				changeButtonsStatus(patientSelected);
+			} else {
+				responseBox.failureResponse(response);
+			}
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		} catch (InterruptedException e1) {
+			e1.printStackTrace();
+		}
+	}
+	
 	static void createMenuItem(Menu parent, final TreeColumn column) {
 		final MenuItem itemName = new MenuItem(parent, SWT.CHECK);
 		itemName.setText(column.getText());
